@@ -1,13 +1,17 @@
-﻿namespace QuicDotNet.Test.Console
-{
-    using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 
-    public class Program
+namespace QuicDotNet.Test.Console
+{
+    class Program
     {
-        private static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             var conn = new QuicClient();
-            conn.ConnectAsync("www.google.com", 443).RunSynchronously();
+            await conn.ConnectAsync("www.google.com", 443);
+
+            System.Console.WriteLine("Press ENTER to quit");
+            System.Console.ReadLine();
         }
     }
 }
