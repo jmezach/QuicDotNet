@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QuicDotNet", "QuicDotNet\Qu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QuicDotNet.Test.Unit", "QuicDotNet.Test.Unit\QuicDotNet.Test.Unit.csproj", "{A3A2D3C4-CEDA-4940-98BE-F226A689C2DE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Kestrel.Transport.Quic", "Kestrel.Transport.Quic\Kestrel.Transport.Quic.csproj", "{B10C8BD2-E065-4070-9813-C606CA405E49}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Kestrel.Transport.Quic.TestApp", "Kestrel.Transport.Quic.TestApp\Kestrel.Transport.Quic.TestApp.csproj", "{5341AC0F-C5E7-41BD-8E63-8D0C3F4B6042}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +31,14 @@ Global
 		{A3A2D3C4-CEDA-4940-98BE-F226A689C2DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A3A2D3C4-CEDA-4940-98BE-F226A689C2DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A3A2D3C4-CEDA-4940-98BE-F226A689C2DE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B10C8BD2-E065-4070-9813-C606CA405E49}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B10C8BD2-E065-4070-9813-C606CA405E49}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B10C8BD2-E065-4070-9813-C606CA405E49}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B10C8BD2-E065-4070-9813-C606CA405E49}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5341AC0F-C5E7-41BD-8E63-8D0C3F4B6042}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5341AC0F-C5E7-41BD-8E63-8D0C3F4B6042}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5341AC0F-C5E7-41BD-8E63-8D0C3F4B6042}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5341AC0F-C5E7-41BD-8E63-8D0C3F4B6042}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
