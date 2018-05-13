@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal
 {
-    internal sealed class QuicConnection : ConnectionContext
+    internal sealed class QuicConnection : TransportConnection
     {
         internal QuicConnection(Socket socket, MemoryPool<byte> memoryPool, PipeScheduler scheduler, ILogger logger)
         {

@@ -52,6 +52,7 @@
             random.NextBytes(buffer);
 
             var connectionId = BitConverter.ToUInt64(buffer, 0);
+            System.Console.WriteLine(connectionId);
             var regularPacket = new RegularPacket(connectionId, 1, null);
             regularPacket.AddFrame(new StreamFrame(new ClientHandshakeMessage
                                                    {

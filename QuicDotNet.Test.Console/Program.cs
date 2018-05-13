@@ -8,7 +8,7 @@ namespace QuicDotNet.Test.Console
         static async Task Main(string[] args)
         {
             var conn = new QuicClient();
-            await conn.ConnectAsync("www.google.com", 443);
+            await conn.ConnectAsync("localhost", 5000);
 
             System.Console.WriteLine("Press ENTER to quit");
             System.Console.ReadLine();

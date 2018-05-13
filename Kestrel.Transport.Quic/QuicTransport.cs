@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Collections;
 using System.Diagnostics;
 using System.IO.Pipelines;
 using System.Net;
@@ -11,6 +12,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Transport.Abstractions.Internal;
 using Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal;
 using Microsoft.Extensions.Logging;
+using QuicDotNet.Packets;
 
 namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic
 {
@@ -67,7 +69,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic
 
             IPEndPoint endPoint = _endPointInformation.IPEndPoint;
 
-            var listenSocket = new Socket(endPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            var listenSocket = new Socket(endPoint.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
 
             //EnableRebinding(listenSocket);
 
@@ -92,7 +94,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic
                 _endPointInformation.IPEndPoint = (IPEndPoint)listenSocket.LocalEndPoint;
             }
 
-            listenSocket.Listen(512);
+            //listenSocket.Listen(512);
 
             _listenSocket = listenSocket;
 
@@ -140,10 +142,40 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic
                     {
                         try
                         {
-                            var acceptSocket = await _listenSocket.AcceptAsync();
-                            acceptSocket.NoDelay = _endPointInformation.NoDelay;
+                            ArraySegment<byte> buffer = new ArraySegment<byte>(new byte[4096]);
+                            int receivedBytes = await _listenSocket.ReceiveAsync(buffer, SocketFlags.None);
+                            if (receivedBytes > 0)
+                            {
+                                byte publicFlags = buffer.Array[0];
+                                bool versionPresent = (publicFlags & 0x01) != 0;
+                                bool resetPresent = (publicFlags & 0x02) != 0;
 
-                            var connection = new QuicConnection(acceptSocket, _memoryPool, _schedulers[schedulerIndex], _logger);
+                                System.Console.WriteLine("PUBLIC_FLAGS_VERSION:" + versionPresent);
+                                System.Console.WriteLine("PUBLIC_FLAGS_RESET:" + resetPresent);
+
+                                int connectionIdLength = 0;
+                                if ((publicFlags & 0x0C) != 0) {
+                                    System.Console.WriteLine("8 byte connectionID");
+                                    connectionIdLength = 8;
+                                } else if ((publicFlags & 0x08) != 0) {
+                                    System.Console.WriteLine("4 byte connectionID");
+                                    connectionIdLength = 4;
+                                } else if ((publicFlags & 0x04) != 0) {
+                                    System.Console.WriteLine("2 byte connectionID");
+                                    connectionIdLength = 2;
+                                } else if ((publicFlags & 0x00) != 0) {
+                                    System.Console.WriteLine("No connectionID");
+                                    connectionIdLength = 0;
+                                }
+
+                                if (connectionIdLength > 0) {
+                                    UInt64 connectionID = BitConverter.ToUInt64(buffer.AsSpan().Slice(1, connectionIdLength).ToArray(), 0);
+                                    System.Console.WriteLine("ConneectionId: " + connectionID);
+                                }
+                            }
+                            
+
+                            var connection = new QuicConnection(_listenSocket, _memoryPool, _schedulers[schedulerIndex], _logger);
                             _ = connection.StartAsync(_dispatcher);
                         }
                         catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionReset)
