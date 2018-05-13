@@ -6,6 +6,7 @@ using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.ExceptionServices;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Hosting;
@@ -153,25 +154,44 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic
                                 System.Console.WriteLine("PUBLIC_FLAGS_VERSION:" + versionPresent);
                                 System.Console.WriteLine("PUBLIC_FLAGS_RESET:" + resetPresent);
 
-                                int connectionIdLength = 0;
+                                int next = 1;
+
+                                UInt64 connectionID = 0;
                                 if ((publicFlags & 0x0C) != 0) {
                                     System.Console.WriteLine("8 byte connectionID");
-                                    connectionIdLength = 8;
+                                    connectionID = BitConverter.ToUInt64(buffer.AsSpan().Slice(next, 8).ToArray(), 0);
+                                    next += 8;
                                 } else if ((publicFlags & 0x08) != 0) {
                                     System.Console.WriteLine("4 byte connectionID");
-                                    connectionIdLength = 4;
+                                    connectionID = BitConverter.ToUInt32(buffer.AsSpan().Slice(next, 4).ToArray(), 0);
+                                    next += 4;
                                 } else if ((publicFlags & 0x04) != 0) {
                                     System.Console.WriteLine("2 byte connectionID");
-                                    connectionIdLength = 2;
-                                } else if ((publicFlags & 0x00) != 0) {
-                                    System.Console.WriteLine("No connectionID");
-                                    connectionIdLength = 0;
+                                    connectionID = BitConverter.ToUInt16(buffer.AsSpan().Slice(next, 4).ToArray(), 0);
+                                    next += 2;
                                 }
 
-                                if (connectionIdLength > 0) {
-                                    UInt64 connectionID = BitConverter.ToUInt64(buffer.AsSpan().Slice(1, connectionIdLength).ToArray(), 0);
-                                    System.Console.WriteLine("ConneectionId: " + connectionID);
+                                string quicVersion = Encoding.ASCII.GetString(buffer.AsSpan().Slice(next, 4).ToArray(), 0, 4);
+                                next += 4;
+
+                                UInt64 packetNumber = 0;
+                                if ((publicFlags & 0x30) != 0) {
+                                    System.Console.WriteLine("6 bytes packetNumber");
+                                    packetNumber = BitConverter.ToUInt64(buffer.AsSpan().Slice(next, 8).ToArray(), 0);
+                                } else if ((publicFlags & 0x20) != 0) {
+                                    System.Console.WriteLine("4 bytes packetNumber");
+                                    packetNumber = BitConverter.ToUInt32(buffer.AsSpan().Slice(next, 4).ToArray(), 0);
+                                } else if ((publicFlags & 0x10) != 0) {
+                                    System.Console.WriteLine("2 bytes packetNumber");
+                                    packetNumber = BitConverter.ToUInt16(buffer.AsSpan().Slice(next, 2).ToArray(), 0);
+                                } else {
+                                    System.Console.WriteLine("1 byte packetNumber");
+                                    packetNumber = buffer.AsSpan().Slice(next, 1).ToArray()[0];
                                 }
+
+                                System.Console.WriteLine("ConnectionId: " + connectionID);
+                                System.Console.WriteLine("QuicVersion: " + quicVersion);
+                                System.Console.WriteLine("PacketNumber: " + packetNumber);
                             }
                             
 
