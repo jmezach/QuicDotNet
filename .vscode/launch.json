@@ -12,6 +12,7 @@
            "program": "${workspaceRoot}/Kestrel.Transport.Quic.TestApp/bin/Debug/netcoreapp2.1/Kestrel.Transport.Quic.TestApp.dll",
            "args": [],
            "cwd": "${workspaceRoot}",
+           "justMyCode": false,
            "stopAtEntry": false,
            "launchBrowser": {
                "enabled": false,

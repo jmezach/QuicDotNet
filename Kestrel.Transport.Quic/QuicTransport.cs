@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Pipelines;
 using System.Net;
@@ -30,6 +31,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic
         private Socket _listenSocket;
         private Task _listenTask;
         private Exception _listenException;
+        private Dictionary<UInt64, QuicConnection> _connections = new Dictionary<UInt64, QuicConnection>();
         private volatile bool _unbinding;
 
         internal QuicTransport(
@@ -144,59 +146,104 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic
                         try
                         {
                             ArraySegment<byte> buffer = new ArraySegment<byte>(new byte[4096]);
-                            int receivedBytes = await _listenSocket.ReceiveAsync(buffer, SocketFlags.None);
-                            if (receivedBytes > 0)
+                            IPEndPoint sender = new IPEndPoint(_listenSocket.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0);
+                            SocketReceiveFromResult receiveResult = await _listenSocket.ReceiveFromAsync(buffer, SocketFlags.None, sender);
+                            if (receiveResult.ReceivedBytes > 0)
                             {
-                                byte publicFlags = buffer.Array[0];
-                                bool versionPresent = (publicFlags & 0x01) != 0;
-                                bool resetPresent = (publicFlags & 0x02) != 0;
+                                System.Console.WriteLine("Received packet from:" + receiveResult.RemoteEndPoint);
 
-                                System.Console.WriteLine("PUBLIC_FLAGS_VERSION:" + versionPresent);
-                                System.Console.WriteLine("PUBLIC_FLAGS_RESET:" + resetPresent);
+                                byte publicFlags = buffer.Array[0];
+                                bool longHeader = (publicFlags & 0x08) != 0;
+
+                                string packetType = "";
+                                if ((publicFlags & 0x7F) != 0) {
+                                    packetType = "Initial (0x7f)";
+                                } else if ((publicFlags & 0x7E) != 0) {
+                                    packetType = "Retry (0x7e)";
+                                } else if ((publicFlags & 0x7D) != 0) {
+                                    packetType = "Handshake (0x7d)";
+                                } else if ((publicFlags & 0x7c) != 0) {
+                                    packetType = "0-RTT protected (0x7c)";
+                                }
 
                                 int next = 1;
 
-                                UInt64 connectionID = 0;
-                                if ((publicFlags & 0x0C) != 0) {
-                                    System.Console.WriteLine("8 byte connectionID");
-                                    connectionID = BitConverter.ToUInt64(buffer.AsSpan().Slice(next, 8).ToArray(), 0);
-                                    next += 8;
-                                } else if ((publicFlags & 0x08) != 0) {
-                                    System.Console.WriteLine("4 byte connectionID");
-                                    connectionID = BitConverter.ToUInt32(buffer.AsSpan().Slice(next, 4).ToArray(), 0);
-                                    next += 4;
-                                } else if ((publicFlags & 0x04) != 0) {
-                                    System.Console.WriteLine("2 byte connectionID");
-                                    connectionID = BitConverter.ToUInt16(buffer.AsSpan().Slice(next, 4).ToArray(), 0);
-                                    next += 2;
-                                }
-
-                                string quicVersion = Encoding.ASCII.GetString(buffer.AsSpan().Slice(next, 4).ToArray(), 0, 4);
+                                string quicVersion = BitConverter.ToString(buffer.AsSpan().Slice(next, 4).ToArray(), 0, 4);
                                 next += 4;
 
-                                UInt64 packetNumber = 0;
-                                if ((publicFlags & 0x30) != 0) {
-                                    System.Console.WriteLine("6 bytes packetNumber");
-                                    packetNumber = BitConverter.ToUInt64(buffer.AsSpan().Slice(next, 8).ToArray(), 0);
-                                } else if ((publicFlags & 0x20) != 0) {
-                                    System.Console.WriteLine("4 bytes packetNumber");
-                                    packetNumber = BitConverter.ToUInt32(buffer.AsSpan().Slice(next, 4).ToArray(), 0);
-                                } else if ((publicFlags & 0x10) != 0) {
-                                    System.Console.WriteLine("2 bytes packetNumber");
-                                    packetNumber = BitConverter.ToUInt16(buffer.AsSpan().Slice(next, 2).ToArray(), 0);
-                                } else {
-                                    System.Console.WriteLine("1 byte packetNumber");
-                                    packetNumber = buffer.AsSpan().Slice(next, 1).ToArray()[0];
+                                byte dcilscil = buffer.AsSpan().Slice(next, 1).ToArray()[0];
+                                int dcil = dcilscil >> 4;
+                                int scil = dcilscil & 0x0F;
+
+                                if (dcil != 0) {
+                                    dcil += 3;
+                                }
+                                if (scil != 0) {
+                                    scil += 3;
                                 }
 
-                                System.Console.WriteLine("ConnectionId: " + connectionID);
-                                System.Console.WriteLine("QuicVersion: " + quicVersion);
-                                System.Console.WriteLine("PacketNumber: " + packetNumber);
-                            }
-                            
+                                next += 1;
 
-                            var connection = new QuicConnection(_listenSocket, _memoryPool, _schedulers[schedulerIndex], _logger);
-                            _ = connection.StartAsync(_dispatcher);
+                                System.Console.WriteLine("DCIL:" + dcil);
+                                System.Console.WriteLine("SCIL:" + scil);
+
+                                string destinationConnectionID = BitConverter.ToString(buffer.AsSpan().Slice(next, dcil).ToArray());
+                                next += dcil;
+
+                                string sourceConnectionID = BitConverter.ToString(buffer.AsSpan().Slice(next, scil).ToArray());
+                                next += scil;
+
+                                byte msb = buffer.AsSpan().Slice(next++, 1)[0];
+                                int count = 0;
+                                if ((msb & 0x40) != 0) {
+                                    count += 1;
+                                    msb -= 0x40;
+                                }
+                                if ((msb & 0x80) != 0) {
+                                    count += 2;
+                                    msb -= 0x80;
+                                }
+
+                                long payloadLength = msb;
+                                for (var i = 1; i < Math.Pow(2, count); i++) {
+                                    payloadLength = payloadLength << 8;
+                                    payloadLength += buffer.AsSpan().Slice(next++, 1)[0];
+                                }
+
+                                byte[] packetNumberBytes = buffer.AsSpan().Slice(next, 4).ToArray();
+                                if (BitConverter.IsLittleEndian) {
+                                    Array.Reverse(packetNumberBytes);
+                                }
+                                long packetNumber = BitConverter.ToUInt32(packetNumberBytes, 0);
+                                next += 4;
+                                
+                                System.Console.WriteLine("Long Header: " + longHeader);
+                                System.Console.WriteLine("PacketType: " + packetType);
+                                System.Console.WriteLine("Destination ConnectionId: " + destinationConnectionID);
+                                System.Console.WriteLine("Source ConnectionId: " + sourceConnectionID);
+                                System.Console.WriteLine("QuicVersion: " + quicVersion);
+                                System.Console.WriteLine("PayloadLength: " + payloadLength);
+                                System.Console.WriteLine("PacketNumber: " + packetNumber);
+                                System.Console.WriteLine("Next: " + next);
+
+                                byte[] frame = buffer.AsSpan().Slice(next).ToArray();
+
+                                //var response = new RegularPacket(connectionID, 2, null);
+                                //await _listenSocket.SendToAsync(new ArraySegment<byte>(response.PadAndNullEncrypt()), SocketFlags.None, receiveResult.RemoteEndPoint);
+
+                                /* 
+                                if (_connections.TryGetValue(connectionID, out QuicConnection connection))
+                                {
+                                    await connection.Input.WriteAsync(buffer);
+                                }
+                                else
+                                {
+                                    connection = new QuicConnection(connectionID.ToString(), _listenSocket, _memoryPool, _schedulers[schedulerIndex], _logger);
+                                    _connections.Add(connectionID, connection);
+                                    await connection.StartAsync(_dispatcher);
+                                }
+                                */
+                            }
                         }
                         catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionReset)
                         {
@@ -205,7 +252,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic
                         }
                         catch (SocketException ex) when (!_unbinding)
                         {
-                            _logger.LogError($"Connection Error: connectionId: ({null})", ex);
+                            _logger.LogError(ex, $"Connection Error: connectionId: ({null})");
 
                         }
                     }
