@@ -11,8 +11,4 @@
     <PackageReference Include="Microsoft.Extensions.Options" Version="2.1.0-rc1-final" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\QuicDotNet\QuicDotNet.csproj" />
-  </ItemGroup>
-
 </Project>

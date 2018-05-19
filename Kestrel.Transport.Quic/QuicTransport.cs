@@ -9,12 +9,13 @@ using System.Net.Sockets;
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading.Tasks;
+using Kestrel.Transport.Quic.Internal.Headers;
+using Kestrel.Transport.Quic.Internal.Packets;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Transport.Abstractions.Internal;
 using Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal;
 using Microsoft.Extensions.Logging;
-using QuicDotNet.Packets;
 
 namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic
 {
@@ -150,83 +151,8 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Quic
                             SocketReceiveFromResult receiveResult = await _listenSocket.ReceiveFromAsync(buffer, SocketFlags.None, sender);
                             if (receiveResult.ReceivedBytes > 0)
                             {
-                                System.Console.WriteLine("Received packet from:" + receiveResult.RemoteEndPoint);
-
-                                byte publicFlags = buffer.Array[0];
-                                bool longHeader = (publicFlags & 0x08) != 0;
-
-                                string packetType = "";
-                                if ((publicFlags & 0x7F) != 0) {
-                                    packetType = "Initial (0x7f)";
-                                } else if ((publicFlags & 0x7E) != 0) {
-                                    packetType = "Retry (0x7e)";
-                                } else if ((publicFlags & 0x7D) != 0) {
-                                    packetType = "Handshake (0x7d)";
-                                } else if ((publicFlags & 0x7c) != 0) {
-                                    packetType = "0-RTT protected (0x7c)";
-                                }
-
-                                int next = 1;
-
-                                string quicVersion = BitConverter.ToString(buffer.AsSpan().Slice(next, 4).ToArray(), 0, 4);
-                                next += 4;
-
-                                byte dcilscil = buffer.AsSpan().Slice(next, 1).ToArray()[0];
-                                int dcil = dcilscil >> 4;
-                                int scil = dcilscil & 0x0F;
-
-                                if (dcil != 0) {
-                                    dcil += 3;
-                                }
-                                if (scil != 0) {
-                                    scil += 3;
-                                }
-
-                                next += 1;
-
-                                System.Console.WriteLine("DCIL:" + dcil);
-                                System.Console.WriteLine("SCIL:" + scil);
-
-                                string destinationConnectionID = BitConverter.ToString(buffer.AsSpan().Slice(next, dcil).ToArray());
-                                next += dcil;
-
-                                string sourceConnectionID = BitConverter.ToString(buffer.AsSpan().Slice(next, scil).ToArray());
-                                next += scil;
-
-                                byte msb = buffer.AsSpan().Slice(next++, 1)[0];
-                                int count = 0;
-                                if ((msb & 0x40) != 0) {
-                                    count += 1;
-                                    msb -= 0x40;
-                                }
-                                if ((msb & 0x80) != 0) {
-                                    count += 2;
-                                    msb -= 0x80;
-                                }
-
-                                long payloadLength = msb;
-                                for (var i = 1; i < Math.Pow(2, count); i++) {
-                                    payloadLength = payloadLength << 8;
-                                    payloadLength += buffer.AsSpan().Slice(next++, 1)[0];
-                                }
-
-                                byte[] packetNumberBytes = buffer.AsSpan().Slice(next, 4).ToArray();
-                                if (BitConverter.IsLittleEndian) {
-                                    Array.Reverse(packetNumberBytes);
-                                }
-                                long packetNumber = BitConverter.ToUInt32(packetNumberBytes, 0);
-                                next += 4;
-                                
-                                System.Console.WriteLine("Long Header: " + longHeader);
-                                System.Console.WriteLine("PacketType: " + packetType);
-                                System.Console.WriteLine("Destination ConnectionId: " + destinationConnectionID);
-                                System.Console.WriteLine("Source ConnectionId: " + sourceConnectionID);
-                                System.Console.WriteLine("QuicVersion: " + quicVersion);
-                                System.Console.WriteLine("PayloadLength: " + payloadLength);
-                                System.Console.WriteLine("PacketNumber: " + packetNumber);
-                                System.Console.WriteLine("Next: " + next);
-
-                                byte[] frame = buffer.AsSpan().Slice(next).ToArray();
+                                AbstractPacketBase packet = AbstractPacketBase.Parse(buffer.AsSpan());
+                                System.Console.WriteLine($"rcv {receiveResult.RemoteEndPoint} " + packet.ToString());
 
                                 //var response = new RegularPacket(connectionID, 2, null);
                                 //await _listenSocket.SendToAsync(new ArraySegment<byte>(response.PadAndNullEncrypt()), SocketFlags.None, receiveResult.RemoteEndPoint);
